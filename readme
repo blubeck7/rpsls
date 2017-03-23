@@ -1,0 +1,19 @@
+Welcome to the game Rock Paper Scissors Lizard Spock!
+
+This is a single player game that pits the player against the computer.
+The computer selects its choice based on a neural network.  
+
+Here are the rules as stated by Sheldon Cooper:
+Scissors cuts paper
+Paper covers rock
+Rock crushes lizard
+Lizard poisons Spock
+Spock smashes scissors
+Scissors decapitates lizard
+Lizard eats paper
+Paper disproves Spock
+Spock vaporizes rock
+
+And as it always has been
+
+Rock crushes scissors
