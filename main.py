@@ -1,7 +1,5 @@
 import random
-import tensorflow as tf
-from keras.models import Sequential
-from keras.layers import Dense, Activation
+import neuralnet as nn
 import numpy as np
 
 class Computer:
@@ -12,61 +10,64 @@ class Computer:
     selection.
     """
     def __init__(self):
-        self.difficulty = 3 #number of players moves computer remembers 
+        self.difficulty = 4 #number of players moves used to predict the next
+        self.prob = nn.MultiClassifier(self.difficulty,15,5)
         
-        self.rounds_p = [] #record players choices
-        self.rounds_c = [] #record computer choices
-        self.rounds_o = [] #record outcome of each round
+        self.player_choices = np.zeros(self.difficulty + 1, dtype = np.int64) #record players choices
+        self.train_x = np.zeros((1, self.difficulty), dtype = np.int64) #players choices reshaped for training
+        self.train_y = np.zeros(1, dtype = np.int64)
         
-        self.prob_rock = Sequential()
-        self.prob_rock.add(Dense(5, activation='sigmoid', input_dim = 1))
-        self.prob_win.add(Dense(1, activation='sigmoid'))
-        self.prob_win.compile(loss='binary_crossentropy', optimizer='sgd', metrics=['accuracy'])
+    def save_player_choice(self, player_choice, num_rounds):
+        #saves players choices
+        if num_rounds <= 5:
+            self.player_choices[num_rounds - 1] = player_choice
+        else:
+            self.player_choices[0:self.difficulty] = self.player_choices[1:self.difficulty + 1]
+            self.player_choices[self.difficulty] = player_choice
 
-        self.prob_tie = Sequential()
-        self.prob_tie.add(Dense(5, activation='sigmoid', input_dim = 2))
-        self.prob_tie.add(Dense(1, activation='sigmoid'))
-        self.prob_tie.compile(loss='binary_crossentropy', optimizer='sgd', metrics=['accuracy'])
+        #update the data for training           
+        if num_rounds == 5:
+            self.train_x[0,0:self.difficulty] = self.player_choices[0:self.difficulty]
+            self.train_y[0] = self.player_choices[self.difficulty]
+        elif num_rounds > 5:
+            self.train_x = np.append(self.train_x, [self.player_choices[0:self.difficulty]], axis = 0)
+            self.train_y = np.append(self.train_y, self.player_choices[self.difficulty])
 
-        self.prob_loss = Sequential()
-        self.prob_loss.add(Dense(5, activation='sigmoid', input_dim = 2))
-        self.prob_loss.add(Dense(1, activation='sigmoid'))
-        self.prob_loss.compile(loss='binary_crossentropy', optimizer='sgd', metrics=['accuracy'])
-        
-    def save_round(self, player_choice, outcome):
-        self.rounds_c.append([player_choice, self.computer_choice])
-        self.rounds_o.append(outcome)
-
-    def print_rounds(self):
-        for i in range(len(self.rounds_c)):
-            print(self.rounds_c[i], self.rounds_o[i])
+        print(self.player_choices)
+        print(self.train_x)
+        print(self.train_y)
 
     def train(self):
-        i = len(self.rounds_o)
-        #printprob_win.layer
-        if i > 2:
-            print("Traing the probability of a win")
-            self.prob_win.fit(self.rounds_c, self.rounds_o, batch_size = i)
-            print("Traing the probability of a tie")
-            self.prob_tie.fit(self.rounds_c, self.rounds_o, batch_size = i)
-            print("Traing the probability of a loss")
-            self.prob_loss.fit(self.rounds_c, self.rounds_o, batch_size = i)
+        self.prob.train(self.train_x, self.train_y)
 
-    def choice(self, player_choice):
+    def choice(self, num_rounds):
         """
-        Returns a random integer between 0 and 4
+        Returns a random integer between 0 and 4 for the first 10 rounds.
+        After round 10 a neural network is trained based on the player's
+        previous choices. The computer then predicts which choice the player
+        is likely to make, and then randomly chooses a winning choice.
         """
-        i = len(self.rounds_o)
-        if i > 2:
-            p = np.array([player_choice])
-            pw = self.prob_win.predict(p)
-            pt = self.prob_tie.predict(p)
-            pl = self.prob_loss.predict(p)
-            print(pw)
-        
-        self.computer_choice = random.randint(0,4)
-        
-        return self.computer_choice
+        if num_rounds <= 10:
+            computer_choice = random.randint(0,4)
+        else:
+            #Train
+            self.train()
+            player_choice = self.prob.predict([self.player_choices[1:]])
+            print("Player is most likely to choose " + number_to_name(player_choice))
+
+            #choose move for computer
+            if player_choice == 0: #rock
+                computer_choice = random.choice([1,2]) #rock loses to spock or paper
+            elif player_choice == 1: #spock
+                computer_choice = random.choice([2,3]) #spock loses to paper or lizard
+            elif player_choice == 2: #paper
+                computer_choice = random.choice([3,4]) #paper loses to lizard or scissors
+            elif player_choice == 3: #lizard
+                computer_choice = random.choice([0,4]) #lizard loses to rock or scissors
+            else: #scissors
+                computer_choice = random.choice([0,1]) #scissors loses to rock or spock
+                
+        return computer_choice
 
 def name_to_number(name):
     """
@@ -106,7 +107,7 @@ def number_to_name(number):
 
     return name
 
-def player_choice():
+def get_player_choice():
     """
     Gets the players choice
     """
@@ -140,28 +141,41 @@ def rpsls():
     This functions plays a round of the game
     """
 
+    wins = 0 # number of player wins
+    loses = 0 # number of player loses
+    ties = 0
+
+    num_rounds = 0
     comp = Computer()
 
     while True:
-        player = player_choice()
-        print("Player chooses",number_to_name(player))
-        if player == 9:
+        player_choice = get_player_choice()
+        if player_choice == 9:
             break
+
+        num_rounds = num_rounds + 1
+
+        computer_choice = comp.choice(num_rounds)
+
+        print("Computer chooses",number_to_name(computer_choice))
+        print("Player chooses", number_to_name(player_choice))
         
-        computer = comp.choice(player)
-        print("Computer chooses",number_to_name(computer))
-        outcome = winner(player, computer)
+        outcome = winner(player_choice, computer_choice)
         
         if outcome == 0:
+            ties = ties + 1
             print("Tie!")
         elif outcome == 1:
+            wins = wins + 1
             print("Player wins!")
         else:
+            loses = loses + 1
             print("Computer wins!")
 
         #Save round
-        comp.save_round(player,outcome)
-        comp.print_rounds()
-        comp.train()
+        comp.save_player_choice(player_choice, num_rounds)
+
+        #update and print stats
+        print(str(num_rounds) + " rounds: " + str(wins) + " wins / " + str(loses) + " loses / " + str(ties) + " ties")
        
 rpsls()
